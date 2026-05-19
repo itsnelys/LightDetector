@@ -27,6 +27,7 @@ The system initializes by scanning the current grid for tagged lights, tagged LC
 | `DAY_THRESHOLD` | `0.01f` | Minimum solar production ratio required to be considered daytime. |
 | `NIGHT_INTENSITY` | `0.5f` | Light intensity applied immediately when night mode starts. |
 | `RESCAN_EVERY_TICKS` | `30` | Automatic block rescan interval. The script runs on `Update100`. |
+| `SWITCH_DELAY_UPDATES` | `12` | Delay before changing day/night mode. Prevents short shadows from triggering night mode. |
 
 ### **Required Blocks**
 | Block | Required Name / Rule | Description |
@@ -50,9 +51,12 @@ The script uses solar panel output to determine whether the grid is in day or ni
 1.  **Scan solar panels:** Finds solar power producers on the same grid.
 2.  **Measure output:** Adds current solar output and maximum solar output.
 3.  **Compute ratio:** Divides current output by maximum output.
-4.  **Switch mode:** If the ratio is below `DAY_THRESHOLD`, the script enters night mode.
+4.  **Confirm change:** If the detected state changes, the script starts a delay timer.
+5.  **Switch mode:** The script changes mode only if the new detected state stays stable for `SWITCH_DELAY_UPDATES`.
 
 If no solar panel is found, the script stays in day mode by default.
+
+This delay prevents short shadows, moving ships, or temporary solar occlusion from immediately switching the lights to night mode.
 
 ---
 
@@ -84,6 +88,8 @@ Tagged LCD panels provide a compact status dashboard for the lighting system.
 
 ### **Displayed Information**
 * **State:** Shows whether the system is in `JOUR` or `NUIT`.
+* **Detection:** Shows the current solar reading before the delay timer is applied.
+* **Timer:** Shows whether the state is stable or waiting before switching.
 * **Lights:** Shows the active light behavior, such as restored day intensity or red night intensity.
 * **Detected Blocks:** Shows how many tagged lights and tagged LCD panels are currently found.
 
@@ -119,6 +125,7 @@ Manual `day` and `night` commands are useful for testing the lighting behavior w
 | LCD is not updated | Rename the LCD so its name contains `[DN]`, then run `scan`. |
 | Script always stays in day mode | Add at least one solar panel on the same grid, or use the `night` command to test manually. |
 | Script switches to night too early or too late | Adjust `DAY_THRESHOLD`. A higher value makes night mode start earlier. |
+| Shadows trigger night mode | Increase `SWITCH_DELAY_UPDATES` so the detected state must stay stable longer. |
 | Light intensity does not restore as expected | Make sure the light was detected before night mode started. Run `scan` after adding or renaming lights. |
 | Too many blocks are controlled | Check `LIGHT_TAG` and `LCD_TAG`. Keep them set to `[DN]` unless you intentionally want full-grid control. |
 

@@ -6,6 +6,7 @@ string LCD_TAG = "[DN]";      // Mets "" pour controler tous les LCD de la grill
 float DAY_THRESHOLD = 0.01f;  // Ratio solaire minimum pour le jour.
 float NIGHT_INTENSITY = 0.5f; // Intensite forcee en mode nuit.
 int RESCAN_EVERY_TICKS = 30;
+int SWITCH_DELAY_UPDATES = 12; // 12 x Update100 = environ 20 secondes.
 
 Color DAY_COLOR = new Color(255, 255, 255);
 Color NIGHT_COLOR = new Color(255, 0, 0);
@@ -19,7 +20,10 @@ Dictionary<long, float> savedIntensity = new Dictionary<long, float>();
 
 bool hasAppliedState = false;
 bool lastNight = false;
+bool waitingForSwitch = false;
+bool pendingNight = false;
 int tick = 0;
+int switchWaitTicks = 0;
 
 public Program()
 {
@@ -42,23 +46,36 @@ public void Main(string argument, UpdateType updateSource)
         ScanBlocks();
     }
 
-    bool isNight = IsNightFromSolarOutput();
+    bool detectedNight = IsNightFromSolarOutput();
+    bool requestedNight = detectedNight;
+    bool manualCommand = false;
 
     if (command == "day")
-        isNight = false;
-
-    if (command == "night")
-        isNight = true;
-
-    if (!hasAppliedState || isNight != lastNight || command == "force")
     {
-        ApplyMode(isNight);
-        lastNight = isNight;
-        hasAppliedState = true;
+        requestedNight = false;
+        manualCommand = true;
     }
 
-    UpdatePanels(isNight);
-    DrawStatus(isNight, command);
+    if (command == "night")
+    {
+        requestedNight = true;
+        manualCommand = true;
+    }
+
+    if (!hasAppliedState || manualCommand || command == "force")
+    {
+        ApplyMode(requestedNight);
+        lastNight = requestedNight;
+        hasAppliedState = true;
+        ResetSwitchTimer();
+    }
+    else
+    {
+        UpdateTimedSwitch(detectedNight);
+    }
+
+    UpdatePanels(lastNight, detectedNight);
+    DrawStatus(lastNight, detectedNight, command);
 }
 
 void ScanBlocks()
@@ -153,6 +170,39 @@ void ApplyMode(bool isNight)
     }
 }
 
+void UpdateTimedSwitch(bool detectedNight)
+{
+    if (detectedNight == lastNight)
+    {
+        ResetSwitchTimer();
+        return;
+    }
+
+    if (!waitingForSwitch || pendingNight != detectedNight)
+    {
+        waitingForSwitch = true;
+        pendingNight = detectedNight;
+        switchWaitTicks = 1;
+        return;
+    }
+
+    switchWaitTicks++;
+
+    if (switchWaitTicks >= SWITCH_DELAY_UPDATES)
+    {
+        ApplyMode(detectedNight);
+        lastNight = detectedNight;
+        ResetSwitchTimer();
+    }
+}
+
+void ResetSwitchTimer()
+{
+    waitingForSwitch = false;
+    pendingNight = false;
+    switchWaitTicks = 0;
+}
+
 void ApplyNightMode()
 {
     foreach (IMyLightingBlock light in lights)
@@ -165,7 +215,7 @@ void ApplyNightMode()
         light.Intensity = NIGHT_INTENSITY;
     }
 
-    UpdatePanels(true);
+    UpdatePanels(true, true);
 }
 
 void ApplyDayMode()
@@ -183,10 +233,10 @@ void ApplyDayMode()
     }
 
     savedIntensity.Clear();
-    UpdatePanels(false);
+    UpdatePanels(false, false);
 }
 
-void UpdatePanels(bool isNight)
+void UpdatePanels(bool isNight, bool detectedNight)
 {
     Color background = LCD_DAY_BACKGROUND;
     string stateText = "JOUR";
@@ -199,6 +249,16 @@ void UpdatePanels(bool isNight)
         lightText = "Rouge / intensite 0.5";
     }
 
+    string detectedText = "JOUR";
+
+    if (detectedNight)
+        detectedText = "NUIT";
+
+    string timerText = "Stable";
+
+    if (waitingForSwitch)
+        timerText = switchWaitTicks.ToString() + " / " + SWITCH_DELAY_UPDATES.ToString();
+
     float current = 0f;
     float max = 0f;
     float ratio = GetSolarRatio(out current, out max);
@@ -208,11 +268,16 @@ void UpdatePanels(bool isNight)
     text += "=== DAY / NIGHT SYSTEM ===\n";
     text += "\n";
     text += "Etat        : " + stateText + "\n";
+    text += "Detection   : " + detectedText + "\n";
+    text += "Timer       : " + timerText + "\n";
     text += "Lumieres    : " + lightText + "\n";
+    text += "Solaire     : " + solarPercent + "\n";
+    text += "Production  : " + current.ToString("0.00") + " / " + max.ToString("0.00") + " MW\n";
     text += "\n";
     text += "Blocs trouves\n";
     text += "Lumieres    : " + lights.Count.ToString() + "\n";
     text += "LCD         : " + panels.Count.ToString() + "\n";
+    text += "Solaires    : " + solars.Count.ToString() + "\n";
 
     foreach (IMyTextPanel panel in panels)
     {
@@ -242,15 +307,21 @@ float GetSolarRatio(out float current, out float max)
     return current / max;
 }
 
-void DrawStatus(bool isNight, string command)
+void DrawStatus(bool isNight, bool detectedNight, string command)
 {
     string stateText = "JOUR - Blanc - intensite restauree";
+    string detectedText = "JOUR";
 
     if (isNight)
         stateText = "NUIT - Rouge - intensite 0.5";
 
+    if (detectedNight)
+        detectedText = "NUIT";
+
     Echo("=== SE Day/Night Lights ===");
     Echo("Etat: " + stateText);
+    Echo("Detection solaire: " + detectedText);
+    Echo("Timer: " + switchWaitTicks.ToString() + " / " + SWITCH_DELAY_UPDATES.ToString());
     Echo("Lumieres: " + lights.Count.ToString());
     Echo("Panneaux LCD: " + panels.Count.ToString());
     Echo("Panneaux solaires: " + solars.Count.ToString());

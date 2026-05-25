@@ -1,133 +1,148 @@
-# Space Engineers Day/Night Light Detector - Script Documentation
+# Space Engineers Day/Night Light Detector
 
-This *Space Engineers* programmable block script implements an **automatic day/night lighting system** that detects sunlight from solar panel output, switches tagged lights between day and night modes, and displays a clean status dashboard on tagged LCD panels.
+## FR
 
----
+Script de Programmable Block pour *Space Engineers* qui detecte le jour et la nuit via la production des panneaux solaires, puis adapte automatiquement les lumieres taguees.
 
-## Table of Contents
+Les lumieres et LCD controles doivent contenir le tag `[DN]` dans leur nom, sauf si les reglages sont modifies pour tout controler.
 
-* [Initialization and Configuration](#initialization-and-configuration)
-* [Day and Night Detection Logic](#day-and-night-detection-logic)
-* [Light Control Logic](#light-control-logic)
-* [LCD Display Logic](#lcd-display-logic)
-* [Manual Commands](#manual-commands)
-* [Troubleshooting](#troubleshooting)
+### Installation
 
----
+1. Place un `Programmable Block`.
+2. Copie `Script_DayNightLights.cs` dans le Programmable Block.
+3. Ajoute au moins un panneau solaire sur la meme grille.
+4. Ajoute `[DN]` dans le nom des lumieres a controler.
+5. Ajoute `[DN]` dans le nom des LCD de statut optionnels.
+6. Compile et lance le script.
 
-## Initialization and Configuration
+### Blocs requis
 
-The system initializes by scanning the current grid for tagged lights, tagged LCD panels, and solar panels. Lights and LCDs are controlled only when their name contains the configured tag.
-
-### **Script Constants**
-| Constant | Default Value | Description |
+| Bloc | Nom / Regle | Description |
 | --- | --- | --- |
-| `LIGHT_TAG` | `[DN]` | Any light containing this text in its name is controlled by the script. |
-| `LCD_TAG` | `[DN]` | Any LCD panel containing this text in its name is used as a status display. |
-| `DAY_THRESHOLD` | `0.01f` | Minimum solar production ratio required to be considered daytime. |
-| `NIGHT_INTENSITY` | `0.5f` | Light intensity applied immediately when night mode starts. |
-| `RESCAN_EVERY_TICKS` | `30` | Automatic block rescan interval. The script runs on `Update100`. |
-| `SWITCH_DELAY_UPDATES` | `12` | Delay before changing day/night mode. Prevents short shadows from triggering night mode. |
+| Programmable Block | N'importe quel nom | Execute le script. |
+| Panneau solaire | Meme grille | Sert a detecter le jour ou la nuit. |
+| Lumiere | Contient `[DN]` | Lumiere controlee automatiquement. |
+| LCD | Contient `[DN]` | Affichage optionnel de l'etat. |
 
-### **Required Blocks**
-| Block | Required Name / Rule | Description |
+Exemples : `Hangar Light [DN]`, `Base Spotlight [DN]`, `LCD Day Night [DN]`.
+
+### Reglages
+
+| Reglage | Valeur par defaut | Description |
 | --- | --- | --- |
-| Programmable Block | Any name | Runs the script automatically every `Update100`. |
-| Solar Panel | Same grid | Used to detect whether it is day or night. Multiple solar panels are supported. |
-| Light Block | Contains `[DN]` | Controlled by the script. Works with tagged lights on the same grid. |
-| LCD Panel | Contains `[DN]` | Optional status display. Only tagged LCD panels are updated. |
+| `LIGHT_TAG` | `[DN]` | Tag cherche dans les noms des lumieres. |
+| `LCD_TAG` | `[DN]` | Tag cherche dans les noms des LCD. |
+| `DAY_THRESHOLD` | `0.01f` | Ratio solaire minimum pour le mode jour. |
+| `NIGHT_INTENSITY` | `0.5f` | Intensite forcee en mode nuit. |
+| `RESCAN_EVERY_TICKS` | `30` | Frequence de recherche des blocs. |
+| `SWITCH_DELAY_UPDATES` | `12` | Delai avant changement de mode. |
 
-* **Light naming:** Examples: `Hangar Light [DN]`, `Red Alert Lamp [DN]`, `Base Spotlight [DN]`.
-* **LCD naming:** Examples: `LCD Day Night [DN]`, `Control Screen [DN]`.
-* **Tag behavior:** Set `LIGHT_TAG` or `LCD_TAG` to `""` only if you want the script to control every matching block on the grid.
+### Comportement
 
----
+| Mode | Couleur | Intensite | Etat |
+| --- | --- | --- | --- |
+| Jour | Blanc | Intensite restauree | Active |
+| Nuit | Rouge | `0.5` | Active |
 
-## Day and Night Detection Logic
+Avant de passer en mode nuit, le script memorise l'intensite des lumieres. Au retour du jour, il restaure ces valeurs.
 
-The script uses solar panel output to determine whether the grid is in day or night mode.
+### Commandes
 
-### **Operating Logic**
-1.  **Scan solar panels:** Finds solar power producers on the same grid.
-2.  **Measure output:** Adds current solar output and maximum solar output.
-3.  **Compute ratio:** Divides current output by maximum output.
-4.  **Confirm change:** If the detected state changes, the script starts a delay timer.
-5.  **Switch mode:** The script changes mode only if the new detected state stays stable for `SWITCH_DELAY_UPDATES`.
-
-If no solar panel is found, the script stays in day mode by default.
-
-This delay prevents short shadows, moving ships, or temporary solar occlusion from immediately switching the lights to night mode.
-
----
-
-## Light Control Logic
-
-Tagged lights are switched automatically between day and night states.
-
-### **Day Mode**
-| Property | Value |
+| Commande | Action |
 | --- | --- |
-| Color | White |
-| Intensity | Restored to the value saved before night mode |
-| Enabled | `true` |
+| `scan` | Relance la detection des lumieres, LCD et panneaux solaires. |
+| `force` | Reapplique immediatement le mode detecte. |
+| `day` | Force le mode jour pour test. |
+| `night` | Force le mode nuit pour test. |
 
-### **Night Mode**
-| Property | Value |
+### Depannage
+
+| Probleme | Solution |
 | --- | --- |
-| Color | Red |
-| Intensity | `0.5` |
-| Enabled | `true` |
+| Aucune lumiere ne reagit | Ajoute `[DN]` au nom des lumieres, puis lance `scan`. |
+| Le LCD ne s'actualise pas | Ajoute `[DN]` au nom du LCD, puis lance `scan`. |
+| Le script reste en jour | Ajoute un panneau solaire sur la meme grille ou teste avec `night`. |
+| Les ombres declenchent la nuit trop vite | Augmente `SWITCH_DELAY_UPDATES`. |
 
-Before night mode changes a light intensity, the script stores its current intensity in memory. When day mode returns, the original intensity is restored, then the saved values are cleared for the next night cycle.
+### Note de patch 0.1
 
----
-
-## LCD Display Logic
-
-Tagged LCD panels provide a compact status dashboard for the lighting system.
-
-### **Displayed Information**
-* **State:** Shows whether the system is in `JOUR` or `NUIT`.
-* **Detection:** Shows the current solar reading before the delay timer is applied.
-* **Timer:** Shows whether the state is stable or waiting before switching.
-* **Lights:** Shows the active light behavior, such as restored day intensity or red night intensity.
-* **Detected Blocks:** Shows how many tagged lights and tagged LCD panels are currently found.
-
-The script automatically configures the LCD to:
-* `TEXT_AND_IMAGE` mode
-* white font color
-* compact font size
-* left alignment
-* day or night background color
+- Premiere version documentee.
+- Detection jour/nuit par ratio de production solaire.
+- Controle automatique des lumieres taguees `[DN]`.
+- LCD de statut et commandes manuelles de test.
 
 ---
 
-## Manual Commands
+## EN
 
-Commands can be run from the programmable block argument field.
+*Space Engineers* Programmable Block script that detects day and night from solar panel output, then automatically updates tagged lights.
 
-| Command | Description |
+Controlled lights and LCDs must contain the `[DN]` tag in their name unless the settings are changed to control every matching block.
+
+### Installation
+
+1. Place a `Programmable Block`.
+2. Copy `Script_DayNightLights.cs` into the Programmable Block.
+3. Add at least one solar panel on the same grid.
+4. Add `[DN]` to the name of lights you want to control.
+5. Add `[DN]` to optional status LCD names.
+6. Compile and run the script.
+
+### Required Blocks
+
+| Block | Name / Rule | Description |
+| --- | --- | --- |
+| Programmable Block | Any name | Runs the script. |
+| Solar panel | Same grid | Used to detect day or night. |
+| Light | Contains `[DN]` | Automatically controlled light. |
+| LCD | Contains `[DN]` | Optional status display. |
+
+Examples: `Hangar Light [DN]`, `Base Spotlight [DN]`, `LCD Day Night [DN]`.
+
+### Settings
+
+| Setting | Default Value | Description |
+| --- | --- | --- |
+| `LIGHT_TAG` | `[DN]` | Tag searched in light names. |
+| `LCD_TAG` | `[DN]` | Tag searched in LCD names. |
+| `DAY_THRESHOLD` | `0.01f` | Minimum solar ratio for day mode. |
+| `NIGHT_INTENSITY` | `0.5f` | Forced night mode intensity. |
+| `RESCAN_EVERY_TICKS` | `30` | Block rescan interval. |
+| `SWITCH_DELAY_UPDATES` | `12` | Delay before switching mode. |
+
+### Behavior
+
+| Mode | Color | Intensity | State |
+| --- | --- | --- | --- |
+| Day | White | Restored intensity | Enabled |
+| Night | Red | `0.5` | Enabled |
+
+Before switching to night mode, the script stores each light intensity. When day returns, it restores those values.
+
+### Commands
+
+| Command | Action |
 | --- | --- |
-| `scan` | Rescans lights, LCD panels, and solar panels immediately. |
-| `force` | Reapplies the current detected mode immediately. |
-| `day` | Forces day mode manually. |
-| `night` | Forces night mode manually. |
+| `scan` | Rescans lights, LCDs, and solar panels. |
+| `force` | Immediately reapplies the detected mode. |
+| `day` | Forces day mode for testing. |
+| `night` | Forces night mode for testing. |
 
-Manual `day` and `night` commands are useful for testing the lighting behavior without waiting for the solar output to change.
-
----
-
-## Troubleshooting
+### Troubleshooting
 
 | Problem | Fix |
 | --- | --- |
-| No lights are controlled | Rename the target lights so their name contains `[DN]`, then run `scan`. |
-| LCD is not updated | Rename the LCD so its name contains `[DN]`, then run `scan`. |
-| Script always stays in day mode | Add at least one solar panel on the same grid, or use the `night` command to test manually. |
-| Script switches to night too early or too late | Adjust `DAY_THRESHOLD`. A higher value makes night mode start earlier. |
-| Shadows trigger night mode | Increase `SWITCH_DELAY_UPDATES` so the detected state must stay stable longer. |
-| Light intensity does not restore as expected | Make sure the light was detected before night mode started. Run `scan` after adding or renaming lights. |
-| Too many blocks are controlled | Check `LIGHT_TAG` and `LCD_TAG`. Keep them set to `[DN]` unless you intentionally want full-grid control. |
+| No lights react | Add `[DN]` to light names, then run `scan`. |
+| LCD is not updated | Add `[DN]` to the LCD name, then run `scan`. |
+| Script stays in day mode | Add a solar panel on the same grid or test with `night`. |
+| Shadows trigger night too quickly | Increase `SWITCH_DELAY_UPDATES`. |
+
+### Patch Note 0.1
+
+- First documented release.
+- Day/night detection from solar production ratio.
+- Automatic control for `[DN]` tagged lights.
+- Status LCD and manual test commands.
 
 ---
 
